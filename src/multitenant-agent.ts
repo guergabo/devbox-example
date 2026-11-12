@@ -1,6 +1,7 @@
 /**
  * Gives two customers their own Namespace tenant and runs, on a Devbox inside
- * each, an Amp agent and a small web app. The web apps open through a local
+ * each, an Amp agent that builds a small web page, served by a Namespace
+ * service. The pages open through a local
  * proxy at http://localhost:4100; clicking "Destroy devbox and tenant" on a
  * page removes that customer's tenant, and once both are destroyed the program
  * cleans up and exits. Safe to rerun: it starts by removing anything a
@@ -164,43 +165,28 @@ async function main() {
 					log(`created devbox ${devbox.name} (${devbox.id}): ${devbox.info.state}`);
 
 					const projectDir = `${devbox.info.workspaceDir}/project`;
-					const webDir = `${devbox.info.workspaceDir}/web`;
 					const install = await retry(log, () => devbox.shell(
-						`curl -fsSL https://ampcode.com/install.sh | bash && sudo ln -sf ~/.amp/bin/amp /usr/local/bin/amp && mkdir -p ${projectDir} ${webDir} && git -C ${projectDir} init -q && git -C ${projectDir} -c user.name=${platform} -c user.email=${platform}@example.com commit -q --allow-empty -m "Empty project"`,
+						`curl -fsSL https://ampcode.com/install.sh | bash && sudo ln -sf ~/.amp/bin/amp /usr/local/bin/amp && mkdir -p ${projectDir} && git -C ${projectDir} init -q && git -C ${projectDir} -c user.name=${platform} -c user.email=${platform}@example.com commit -q --allow-empty -m "Empty project"`,
 					));
 					if (install.exitCode !== 0) throw new Error(`installing Amp failed: ${install.stderr || install.stdout}`);
 					log(`installed Amp and created ${projectDir}`);
-
-					await retry(log, () => devbox.fs.writeFile(
-						`${webDir}/index.html`,
-						page(
-							`Hello from ${customerId}`,
-							`<h1>Hello from ${customerId}</h1>
-<dl><div><dt>Tenant ID</dt><dd>${tenantId}</dd></div><div><dt>Devbox ID</dt><dd>${devbox.id}</dd></div></dl>
-<form method="post" action="destroy"><button type="submit">Destroy devbox and tenant</button></form>`,
-						),
-					));
-					await retry(log, () => devbox.services
-						.create({
-							name: "web",
-							command: "node",
-							args: ["-e", `require("http").createServer((q, r) => { r.setHeader("content-type", "text/html; charset=utf-8"); r.end(require("fs").readFileSync("index.html")); }).listen(${webPort})`],
-							cwd: webDir,
-							restartPolicy: "always",
-						})
-						.catch(() => devbox.services.get("web")));
-					const port = await retry(log, () => devbox.exposedPorts
-						.create({ name: "web", number: webPort })
-						.catch(() => devbox.exposedPorts.get({ number: webPort })));
-					url = port.url;
-					log(`started service web and exposed it at ${url}`);
 
 					const service = await retry(log, () => devbox.services
 						.create({ name: "amp-runner", command: "amp", args: ["--no-tui", "--runner-id", devbox.name], cwd: projectDir })
 						.catch(() => devbox.services.get("amp-runner")));
 					log(`started service ${service.name}: ${service.process?.state}`);
 
-					const task = `Create hello.js that prints "Hello from ${customerId}", run it with node, and commit it.`;
+					const task = `Create index.html in this directory: a single self-contained web page with inline CSS, no JavaScript, and nothing loaded from the internet. Do not start a server or create any other file.
+
+Content, in this order:
+- A small label "Namespace".
+- The heading "Hello from ${customerId}".
+- Two labelled values, each in its own monospace box: "Tenant ID" ${tenantId} and "Devbox ID" ${devbox.id}.
+- Exactly this form, unchanged: <form method="post" action="destroy"><button type="submit">Destroy devbox and tenant</button></form>
+
+Style it like namespace.so: page background #F6F7FC, text #171C2B, muted labels #60689F, font Inter with system sans-serif fallbacks. Center a white card about 480px wide with a 1px #EAECF2 border, 12px corners and 40px padding. Put the values in #F1F2F6 boxes with 6px corners. Make the button full width, pill shaped, background #1C32FF with white text.
+
+When done, commit index.html.`;
 					const deadline = Date.now() + 3 * 60_000;
 					let events: { type: string; session_id?: string; result?: string; is_error?: boolean }[] = [];
 					while (!events.some((event) => event.type === "result")) {
@@ -220,8 +206,23 @@ async function main() {
 					const outcome = events.find((event) => event.type === "result")!;
 					log(`agent finished (${outcome.is_error ? "error" : "success"}): https://ampcode.com/threads/${outcome.session_id}`);
 
-					const output = await retry(log, () => devbox.exec(["node", "hello.js"], { cwd: projectDir }));
-					log(`node hello.js -> ${output.stdout.trim() || output.stderr.trim()}`);
+					const built = await retry(log, () => devbox.exec(["test", "-f", "index.html"], { cwd: projectDir }));
+					if (built.exitCode !== 0) throw new Error("the agent did not create index.html; see its thread above");
+
+					await retry(log, () => devbox.services
+						.create({
+							name: "web",
+							command: "node",
+							args: ["-e", `require("http").createServer((q, r) => { r.setHeader("content-type", "text/html; charset=utf-8"); r.end(require("fs").readFileSync("index.html")); }).listen(${webPort})`],
+							cwd: projectDir,
+							restartPolicy: "always",
+						})
+						.catch(() => devbox.services.get("web")));
+					const port = await retry(log, () => devbox.exposedPorts
+						.create({ name: "web", number: webPort })
+						.catch(() => devbox.exposedPorts.get({ number: webPort })));
+					url = port.url;
+					log(`started service web serving the agent's index.html at ${url}`);
 				} finally {
 					client.close();
 				}

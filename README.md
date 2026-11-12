@@ -1,6 +1,6 @@
 # my-platform-devbox
 
-Gives two customers their own [Namespace](https://namespace.so) tenant and runs, on a Devbox inside each, an [Amp](https://ampcode.com) agent and a small web app. Built with the [Namespace TypeScript SDK](https://github.com/namespacelabs/typescript-sdk).
+Gives two customers their own [Namespace](https://namespace.so) tenant and runs, on a Devbox inside each, an [Amp](https://ampcode.com) agent that builds a small web page, served by a Namespace service. Built with the [Namespace TypeScript SDK](https://github.com/namespacelabs/typescript-sdk).
 
 ```bash
 npm install
@@ -19,8 +19,8 @@ npm start
    3. Creates a blueprint in the tenant: built-in image, the Amp token from the Vault, and a network policy that allows Amp and npm.
    4. Creates a Devbox from the blueprint.
    5. Installs the Amp CLI on it with `devbox.exec` and creates an empty git project.
-   6. Writes a web page showing the tenant and Devbox IDs, runs it as the `web` service, and exposes it on a devbox.so URL.
-   7. Starts `amp --no-tui` as the `amp-runner` service, sends the agent a task, and waits for it to finish.
+   6. Starts `amp --no-tui` as the `amp-runner` service and asks the agent to build `index.html`: a Namespace-styled page showing "Hello from <customer>", the tenant and Devbox IDs, and a "Destroy devbox and tenant" button. Prints the agent's thread link when it finishes.
+   7. Serves the agent's page as the `web` service and exposes it on a devbox.so URL.
    8. Prints `http://localhost:4100/<customer>/`.
 5. Waits until "Destroy devbox and tenant" has been clicked on both pages. Each click removes that customer's tenant and its Devbox.
 6. Removes anything left and exits. It also cleans up on Ctrl+C or after 30 minutes without clicks.

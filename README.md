@@ -1,6 +1,6 @@
 # my-platform-devbox
 
-Gives two customers their own [Namespace](https://namespace.so) tenant, runs an [Amp](https://ampcode.com) agent for each on a Devbox inside it, and deletes everything when the agents finish. Built with the [Namespace TypeScript SDK](https://github.com/namespacelabs/typescript-sdk).
+Gives two customers their own [Namespace](https://namespace.so) tenant and runs, on a Devbox inside each, an [Amp](https://ampcode.com) agent and a small web app. Built with the [Namespace TypeScript SDK](https://github.com/namespacelabs/typescript-sdk).
 
 ```bash
 npm install
@@ -12,15 +12,20 @@ npm start
 
 1. Signs a partner token with your partner key.
 2. Removes any tenants a previous run left behind, so every run starts clean.
-3. For `acme` and `globex`, in parallel:
+3. Starts a local proxy on http://localhost:4100.
+4. For `customer-1` and `customer-2`, in parallel:
    1. Creates the customer's tenant and issues a tenant token for it.
    2. Stores the Amp token in the tenant's Vault.
    3. Creates a blueprint in the tenant: built-in image, the Amp token from the Vault, and a network policy that allows Amp and npm.
    4. Creates a Devbox from the blueprint.
    5. Installs the Amp CLI on it with `devbox.exec` and creates an empty git project.
-   6. Starts `amp --no-tui` as the `amp-runner` service.
-   7. Sends the agent a task, waits for it to finish, and prints the Amp thread URL and the result.
-4. Removes both tenants and everything in them.
+   6. Writes a web page showing the tenant and Devbox IDs, runs it as the `web` service, and exposes it on a devbox.so URL.
+   7. Starts `amp --no-tui` as the `amp-runner` service, sends the agent a task, and waits for it to finish.
+   8. Prints `http://localhost:4100/<customer>/`.
+5. Waits until "Destroy devbox and tenant" has been clicked on both pages. Each click removes that customer's tenant and its Devbox.
+6. Removes anything left and exits. It also cleans up on Ctrl+C or after 30 minutes without clicks.
+
+The devbox.so URLs need credentials for the customer's tenant: your own Namespace login belongs to your workspace, not to the tenants your platform creates. The local proxy fetches each page with a tenant token in the `x-nsc-ingress-auth` header, so you can open them in your browser.
 
 Tenants, Vault secrets, blueprints, and Devboxes all belong to one tenant, so each customer gets their own copy and can't see the other's.
 

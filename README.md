@@ -7,8 +7,7 @@ It uses the [Namespace TypeScript SDK](https://github.com/namespacelabs/typescri
 - **Multi-tenancy**: [`src/platform.ts`](src/platform.ts) signs partner tokens with your platform's key, finds or creates a tenant per customer, and gets short-lived tokens that act only inside it.
 - **Custom images**: [`image/Dockerfile`](image/Dockerfile) defines the agent's environment (Node 22, git, the Amp CLI, an empty project). Each customer's tenant builds it into its own registry.
 - **Vault secrets**: the Amp token is stored in each customer's Vault, so devboxes get it without it appearing anywhere else.
-- **Blueprints**: [`src/customers.ts`](src/customers.ts) defines the devbox once (image, size, token, network policy, session) and applies it to each customer's tenant.
-- **Sessions**: every devbox starts a `shell` session in the project, for poking around by hand.
+- **Blueprints**: [`src/customers.ts`](src/customers.ts) defines the devbox once (image, size, token, network policy) and applies it to each customer's tenant.
 - **Services**: [`src/devboxes.ts`](src/devboxes.ts) runs an [Amp runner](https://ampcode.com/docs/cli/runners) (`amp --no-tui`) on each devbox as a supervised service and can start a first thread on it.
 
 ## Set up
@@ -36,7 +35,6 @@ npm run add-customer -- acme
 npm run devbox -- create acme "Build a to-do app with Vite"
 
 npm run devbox -- list acme                 # each devbox, its runner, and changed files
-npm run devbox -- shell acme <devbox>       # open the devbox's shell session
 npm run devbox -- delete acme [<devbox>]    # delete their devboxes
 
 npm run remove-customer -- acme             # delete their tenant and everything in it

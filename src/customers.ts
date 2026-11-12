@@ -36,8 +36,6 @@ async function addCustomer(customerId: string) {
 		// Amp talks to ampcode.com (and static.ampcode.com for updates); npm
 		// lets the agent install packages for what it builds.
 		networkPolicy: { allowedDomains: ["ampcode.com", "*.ampcode.com", "registry.npmjs.org"] },
-		// A tmux session started on every boot, for poking around by hand.
-		sessions: [{ name: "shell", command: "cd /workspace/project && exec bash -l" }],
 	};
 	const devboxes = createDevboxClient({ tokenSource });
 	try {

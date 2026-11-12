@@ -3,13 +3,12 @@
  *
  *   npm run devbox -- create acme ["Build a to-do app with Vite"]
  *   npm run devbox -- list acme
- *   npm run devbox -- shell acme <devbox>
  *   npm run devbox -- delete acme [<devbox>]
  *
  * Run `npm run add-customer -- acme` once first.
  */
 import { createDevboxClient, type Devbox, type DevboxClient } from "@namespacelabs/sdk";
-import { blueprintName, customer, devboxCli, platformName } from "./platform.js";
+import { blueprintName, customer, platformName } from "./platform.js";
 
 const projectDir = "/workspace/project";
 // Every devbox this platform creates carries these labels, so list and delete
@@ -17,9 +16,9 @@ const projectDir = "/workspace/project";
 const labels = (customerId: string) => ({ app: platformName, customer: customerId });
 
 async function create(client: DevboxClient, customerId: string, task?: string) {
-	// The blueprint fixes the image, size, Amp token, network policy, and the
-	// "shell" session. The name doubles as the Amp runner ID, which must be a
-	// valid hostname and unique across all your customers.
+	// The blueprint fixes the image, size, Amp token, and network policy. The
+	// name doubles as the Amp runner ID, which must be a valid hostname and
+	// unique across all your customers.
 	const devbox = await client.devboxes.create({
 		name: `${customerId}-${Date.now().toString(36)}`,
 		blueprint: blueprintName,
@@ -42,7 +41,6 @@ async function create(client: DevboxClient, customerId: string, task?: string) {
 	console.log(`started amp-runner: start threads on runner "${devbox.name}" from ampcode.com`);
 
 	if (task) console.log(`Amp thread: ${await sendTask(devbox, task)}`);
-	console.log(`shell: npm run devbox -- shell ${customerId} ${devbox.name}`);
 }
 
 // Starts an Amp thread on the devbox's runner. The Amp CLI on the devbox
@@ -103,21 +101,16 @@ async function customerDevboxes(client: DevboxClient, customerId: string): Promi
 
 async function main() {
 	const [command, customerId, arg] = process.argv.slice(2);
-	if (!command || !customerId) throw new Error("usage: devboxes.ts create|list|shell|delete <customer-id> [...]");
+	if (!command || !customerId) throw new Error("usage: devboxes.ts create|list|delete <customer-id> [...]");
 
 	// Every call below acts inside this customer's tenant only.
 	const { tokenSource } = await customer(customerId);
-	if (command === "shell") {
-		if (!arg) throw new Error("usage: devboxes.ts shell <customer-id> <devbox>");
-		return devboxCli(tokenSource, ["session", "connect", arg, "--session", "shell"]);
-	}
-
 	const client = createDevboxClient({ tokenSource });
 	try {
 		if (command === "create") await create(client, customerId, arg);
 		else if (command === "list") await list(client, customerId);
 		else if (command === "delete") await remove(client, customerId, arg);
-		else throw new Error("usage: devboxes.ts create|list|shell|delete <customer-id> [...]");
+		else throw new Error("usage: devboxes.ts create|list|delete <customer-id> [...]");
 	} finally {
 		client.close();
 	}

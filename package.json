@@ -1,10 +1,11 @@
 {
-	"name": "agent-arena",
+	"name": "my-platform-devbox",
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"setup": "tsx src/setup.ts",
-		"arena": "tsx src/arena.ts",
+		"add-customer": "tsx --env-file-if-exists=.env src/customers.ts add",
+		"remove-customer": "tsx --env-file-if-exists=.env src/customers.ts remove",
+		"devbox": "tsx --env-file-if-exists=.env src/devboxes.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

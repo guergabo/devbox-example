@@ -5,6 +5,7 @@ dist/
 # Secrets: keep keys in the Namespace Vault, never in the repo.
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.p8

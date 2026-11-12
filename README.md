@@ -1,63 +1,52 @@
-# Agent Arena
+# my-platform-devbox
 
-Give one task, such as "Add a dark mode toggle", to several coding agents at once. Each agent works on its own copy of a small to-do app in its own Namespace Devbox, and each devbox serves a live preview URL, so you can watch the results side by side and keep the best one.
+A starting point for building a platform on [Namespace](https://namespace.so): every customer of your platform gets their own isolated Namespace tenant, and inside it, devboxes that run an [Amp](https://ampcode.com) coding agent.
 
-It is built with the [Namespace Devbox TypeScript SDK](https://github.com/namespacelabs/typescript-sdk) and shows:
+It uses the [Namespace TypeScript SDK](https://github.com/namespacelabs/typescript-sdk) and shows:
 
-- **Custom images**: [`image/Dockerfile`](image/Dockerfile) bakes Node 22, git, Claude Code, and the sample app into one image.
-- **Blueprints**: [`src/setup.ts`](src/setup.ts) defines every contestant once: image, size, an API key from the Namespace Vault, and a network policy that only allows the Anthropic API and npm.
-- **Sessions**: the blueprint starts a tmux session named `agent` on every devbox. It runs [`image/arena-agent`](image/arena-agent), which waits for the task and runs the agent where you can attach, watch, or take over.
-- **Services**: [`src/arena.ts`](src/arena.ts) starts the app's dev server as a supervised service and exposes it on a `devbox.so` URL.
+- **Multi-tenancy**: [`src/platform.ts`](src/platform.ts) signs partner tokens with your platform's key, finds or creates a tenant per customer, and gets short-lived tokens that act only inside it.
+- **Custom images**: [`image/Dockerfile`](image/Dockerfile) defines the agent's environment (Node 22, git, the Amp CLI, an empty project). Each customer's tenant builds it into its own registry.
+- **Vault secrets**: the Amp token is stored in each customer's Vault, so devboxes get it without it appearing anywhere else.
+- **Blueprints**: [`src/customers.ts`](src/customers.ts) defines the devbox once (image, size, token, network policy, session) and applies it to each customer's tenant.
+- **Sessions**: every devbox starts a `shell` session in the project, for poking around by hand.
+- **Services**: [`src/devboxes.ts`](src/devboxes.ts) runs an [Amp runner](https://ampcode.com/docs/cli/runners) (`amp --no-tui`) on each devbox as a supervised service and can start a first thread on it.
 
-## Agents
+## Set up
 
-| Agent | Needs | What it does |
-| --- | --- | --- |
-| `claude` | An Anthropic API key, or a Claude subscription token from `claude setup-token`, in the Namespace Vault | Runs Claude Code interactively on the task |
-| `demo` | Nothing | Types out its progress and applies a canned dark-mode change, so you can try the arena without a key |
-
-Without `--agent`, each devbox uses `claude` when the blueprint has credentials and `demo` otherwise. To add another agent, such as Codex, install it in the image and add a case to `arena-agent`.
-
-## Run it
-
-You need the [Devbox CLI](https://namespace.so/docs/devbox), logged in (`devbox auth check`), and Node 22.
+You need Node 22, the [Devbox CLI](https://namespace.so/docs/devbox) logged in (`devbox auth check`), and an Amp access token (starts with `sgamp_`; create one under [Settings](https://ampcode.com/settings)).
 
 ```bash
 npm install
-
-# 1. Build the image. The repository root is the build context, so the image
-#    can include the sample app.
-devbox image build . --name arena-runner -f image/Dockerfile --workspace_dir /workspace
-
-# 2. Create the blueprint. Skip the variable to use the demo agent.
-ANTHROPIC_SECRET_ID=sec_... npx tsx src/setup.ts
-
-# 3. Start three contestants.
-npx tsx src/arena.ts run 3 "Add a dark mode toggle"
+cp .env.example .env    # then fill it in
 ```
 
-`run` prints each devbox with its preview URL and the command to watch its agent:
+In `.env`:
+
+- `AMP_API_KEY`: your Amp token. In this template every customer's agent uses it, so their threads run on your Amp account; a real platform would store each customer's own token.
+- `NAMESPACE_PARTNER_*`: your partner ID, issuer, key ID, and the path to your private key. They let your platform create tenants. Today the Namespace team issues them ([support@namespace.so](mailto:support@namespace.so)); this step may change once partner access is self-service. Leave them empty to run everything in your own workspace, without tenants.
+
+## Run it
 
 ```bash
-devbox session connect arena-<id>-1 --session agent
+# Onboard a customer: their tenant, image, Amp token, and blueprint.
+# Takes a few minutes the first time, while the image builds.
+npm run add-customer -- acme
+
+# Start an agent for them, optionally with a first task.
+npm run devbox -- create acme "Build a to-do app with Vite"
+
+npm run devbox -- list acme                 # each devbox, its runner, and changed files
+npm run devbox -- shell acme <devbox>       # open the devbox's shell session
+npm run devbox -- delete acme [<devbox>]    # delete their devboxes
+
+npm run remove-customer -- acme             # delete their tenant and everything in it
 ```
 
-Then:
+`acme` is any ID your platform uses for a customer, such as a user or organization ID from your own database (lowercase letters, digits, and hyphens).
 
-```bash
-npx tsx src/arena.ts status    # runs npm test on every devbox
-npx tsx src/arena.ts cleanup   # deletes the arena devboxes
-```
+## How it works
 
-`nsc vault list` shows your Vault secret IDs. For a subscription token instead of an API key, set `CLAUDE_OAUTH_SECRET_ID`.
-
-## How it fits together
-
-1. `arena.ts run` creates N devboxes from the `agent-arena` blueprint. Each boots with the sample app in `/workspace/app` and the `agent` session waiting.
-2. It writes the task to `/workspace/TASK.md` with `devbox.fs`. The task goes through a file because devboxes created from a blueprint cannot override its environment, and a file the session waits for cannot race with the session starting.
-3. It starts `npm run dev` as the `preview` service and exposes port 5173. Vite's `server.allowedHosts` accepts `.devbox.so`, and hot reload goes through port 443, so the preview updates as the agent edits.
-4. `status` runs `npm test` and `git status` on each devbox through `devbox.exec`.
-
-## The sample app
-
-[`sample-app/`](sample-app) is a Vite to-do app with three Vitest tests. Run it locally with `npm install && npm run dev` in that folder.
+- **Tenants.** `customer("acme")` asks Namespace for the tenant with external account ID `my-platform-devbox:acme`, creating it the first time. Namespace keeps that mapping and allows at most one tenant per ID, so nothing has to stay running to remember it. Calls made with that tenant's token can only see and change that tenant: Namespace enforces the isolation.
+- **Onboarding.** `add-customer` builds `image/Dockerfile` with the Devbox CLI inside the customer's tenant (it hands the CLI a tenant token through `NSC_TOKEN_FILE`), stores the Amp token in the tenant's Vault, and creates the `my-platform-devbox-agent` blueprint there. Rerun it after changing the Dockerfile or the blueprint to roll the change out.
+- **Agents.** `devbox create` creates a devbox from the blueprint, starts `amp --no-tui --runner-id <devbox>` as the `amp-runner` service in `/workspace/project`, and, given a task, runs `amp -x "<task>" --executor runner:<devbox>` on the devbox, which prints the new thread's URL. You can also start threads on the runner from ampcode.com. The project is a git repository with an empty first commit, so Amp's Changes tab shows everything the agent writes.
+- **In a real platform**, your backend would make these same calls when customers sign up, start an agent, or leave.
